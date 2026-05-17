@@ -71,16 +71,23 @@
 </head>
 <body>
 
-    <!-- AUTH SCREEN -->
-    <div id="auth-screen" class="screen active-screen">
-        <div class="center-box">
-            <h1>ZYRO PRESENT</h1>
-            <input type="text" id="auth-email" placeholder="USERNAME">
-            <input type="password" id="auth-pass" placeholder="PASSWORD">
-            <button class="btn" style="width: 100%; margin-bottom: 10px;" onclick="handleAuth('login')">LOGIN</button>
-            <button class="btn white" style="width: 100%;" onclick="handleAuth('signup')">CREATE ACCOUNT</button>
-        </div>
+<!-- AUTH SCREEN -->
+<div id="auth-screen" class="screen active-screen">
+    <div class="center-box">
+        <h1>ZYRO PRESENT</h1>
+
+        <input type="text" id="auth-email" placeholder="USERNAME">
+        <input type="password" id="auth-pass" placeholder="PASSWORD">
+
+        <button class="btn" style="width: 100%;" onclick="handleLogin()">
+            LOGIN
+        </button>
+
+        <p style="margin-top:15px; font-weight:700; font-size:0.8rem; opacity:0.7; text-align:center;">
+            Contact administrator for account access.
+        </p>
     </div>
+</div>
 
     <!-- DASHBOARD -->
     <div id="dashboard" class="screen">
@@ -157,7 +164,14 @@
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut, setPersistence, inMemoryPersistence } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+       import {
+    getAuth,
+    signInWithEmailAndPassword,
+    onAuthStateChanged,
+    signOut,
+    setPersistence,
+    browserSessionPersistence
+} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
         import { getFirestore, collection, addDoc, onSnapshot, query, where, doc, deleteDoc, updateDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
         // !!! INSERT YOUR FIREBASE CONFIG HERE !!!
@@ -183,40 +197,57 @@ const firebaseConfig = {
         let isHidden = false;
 
         // --- AUTH LOGIC ---
-        window.handleAuth = async (type) => {
-            let email = document.getElementById('auth-email').value.trim();
-            const pass = document.getElementById('auth-pass').value;
-            
-            if (!email || !pass) return alert("Fill in all fields.");
-            if (!email.includes('@')) email = email + "@zyropresent.com";
+      // --- LOGIN ONLY AUTH SYSTEM ---
+window.handleLogin = async () => {
+    let email = document.getElementById('auth-email').value.trim();
+    const pass = document.getElementById('auth-pass').value;
 
-            try {
-                // Forces login screen on every browser refresh
-                await setPersistence(auth, inMemoryPersistence);
-                
-                if (type === 'signup') {
-                    await createUserWithEmailAndPassword(auth, email, pass);
-                    alert("Account created!");
-                } else {
-                    await signInWithEmailAndPassword(auth, email, pass);
-                }
-            } catch (e) { alert(e.message); }
-        };
+    if (!email || !pass) {
+        return alert("Fill in all fields.");
+    }
 
-        window.logout = () => signOut(auth);
+    // Allows simple usernames
+    if (!email.includes('@')) {
+        email = email + "@zyropresent.com";
+    }
 
-        onAuthStateChanged(auth, (user) => {
-            if (user) {
-                currentUser = user;
-                showScreen('dashboard');
-                loadProjects();
-            } else {
-                currentUser = null;
-                showScreen('auth-screen');
-                document.getElementById('auth-email').value = '';
-                document.getElementById('auth-pass').value = '';
-            }
-        });
+    try {
+        // Session ONLY lasts while browser tab is open
+        // Closing browser logs them out automatically
+        await setPersistence(auth, browserSessionPersistence);
+
+        await signInWithEmailAndPassword(auth, email, pass);
+
+    } catch (e) {
+        alert("Invalid account or password.");
+    }
+};
+
+window.logout = async () => {
+    await signOut(auth);
+
+    // Extra protection
+    sessionStorage.clear();
+    localStorage.removeItem('firebase:authUser');
+
+    location.reload();
+};
+
+onAuthStateChanged(auth, (user) => {
+    if (user) {
+        currentUser = user;
+        showScreen('dashboard');
+        loadProjects();
+    } else {
+        currentUser = null;
+
+        // Clears all visible auth fields
+        document.getElementById('auth-email').value = '';
+        document.getElementById('auth-pass').value = '';
+
+        showScreen('auth-screen');
+    }
+});
 
         function showScreen(id) {
             document.querySelectorAll('.screen').forEach(s => s.classList.remove('active-screen'));
@@ -408,6 +439,12 @@ const firebaseConfig = {
                 }
             };
         }
+        // AUTO LOGOUT WHEN TAB CLOSES
+window.addEventListener('beforeunload', async () => {
+    try {
+        await signOut(auth);
+    } catch {}
+});
     </script>
 </body>
 </html>
